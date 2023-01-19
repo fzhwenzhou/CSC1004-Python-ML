@@ -6,10 +6,12 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
-
+import multiprocessing
 from utils.config_utils import read_args, load_config, Dict2Object
-
-
+import warnings
+warnings.filterwarnings("ignore")
+class Arg:
+    config_file: str
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
@@ -48,6 +50,7 @@ def train(args, model, device, train_loader, optimizer, epoch):
     :return:
     """
     model.train()
+    train_acc = train_loss = 0
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
@@ -55,12 +58,23 @@ def train(args, model, device, train_loader, optimizer, epoch):
         loss = F.nll_loss(output, target)
         loss.backward()
         optimizer.step()
-    '''Fill your code'''
-    training_acc, training_loss = None, None  # replace this line
+        '''Fill your code'''
+        this_loss = float(loss.item())
+        train_loss += this_loss 
+        this_acc = (torch.argmax(output, 1) == target).sum().item()
+        train_acc += float(this_acc)
+    training_acc, training_loss = train_acc / len(train_loader.dataset), train_loss / len(train_loader.dataset)  # replace this line
+    print("Loss: ", training_loss, ", Accuracy: ", 100.0 * training_acc, "%")
+    try:
+        with open("train_" + str(args.seed) + ".txt", "a") as f:
+            f.write("Loss: " + str(training_loss) + "\n")
+    except:
+        with open("train_" + str(args.seed) + ".txt", "w") as f:
+            f.write("Loss: " + str(training_loss) + "\n")
     return training_acc, training_loss
 
 
-def test(model, device, test_loader):
+def test(config, model, device, test_loader):
     """
     test the model and return the tesing accuracy
     :param model: neural network model
@@ -74,12 +88,22 @@ def test(model, device, test_loader):
     with torch.no_grad():
         for data, target in test_loader:
             '''Fill your code'''
-            pass
-    testing_acc, testing_loss = None, None  # replace this line
+            output = model(data)
+            test_loss += F.nll_loss(output, target, size_average=False).item()
+            pred = output.data.max(1, keepdim=True)[1]
+            correct += pred.eq(target.data.view_as(pred)).sum()
+    testing_acc, testing_loss = float(correct / len(test_loader.dataset)), test_loss / len(test_loader.dataset)  # replace this line
+    print("Test Loss: ", testing_loss, ", Test Accuracy: ", testing_acc * 100.0, "%")
+    try:
+        with open("test_" + str(config.seed) + ".txt", "a") as f:
+            f.write("Test Loss: " + str(testing_loss) + ", Test Accuracy: " + str(testing_acc * 100.0) + "%\n")
+    except:
+        with open("test_" + str(config.seed) + ".txt", "w") as f:
+            f.write("Test Loss: " + str(testing_loss) + ", Test Accuracy: " + str(testing_acc * 100.0) + "%\n")
     return testing_acc, testing_loss
 
 
-def plot(epoches, performance):
+def plot(epoches, performance, title):
     """
     plot the model peformance
     :param epoches: recorded epoches
@@ -87,10 +111,15 @@ def plot(epoches, performance):
     :return:
     """
     """Fill your code"""
-    pass
+    import matplotlib.pyplot as plt
+    plt.plot(epoches, performance)
+    plt.title(title)
+    plt.xlabel("Epoch")
+    plt.ylabel("Performance: " + title)
+    plt.show()
 
 
-def run(config):
+def run(config, pipe):
     use_cuda = not config.no_cuda and torch.cuda.is_available()
     use_mps = not config.no_mps and torch.backends.mps.is_available()
 
@@ -136,41 +165,89 @@ def run(config):
 
     scheduler = StepLR(optimizer, step_size=1, gamma=config.gamma)
     for epoch in range(1, config.epochs + 1):
+        print("Epoch: " + str(epoch) + ", Seed: " + str(config.seed))
         train_acc, train_loss = train(config, model, device, train_loader, optimizer, epoch)
         """record training info, Fill your code"""
-        test_acc, train_loss = test(model, device, test_loader)
+        training_accuracies.append(train_acc)
+        training_loss.append(train_loss)
+        test_acc, test_loss = test(config, model, device, test_loader)
         """record testing info, Fill your code"""
+        testing_accuracies.append(test_acc)
+        testing_loss.append(test_loss)
         scheduler.step()
         """update the records, Fill your code"""
+        epoches.append(epoch)
 
     """plotting training performance with the records"""
-    plot(epoches, training_loss)
+    plot(epoches, training_loss, "Training Loss, Seed = " + str(config.seed))
 
     """plotting testing performance with the records"""
-    plot(epoches, testing_accuracies)
-    plot(epoches, testing_loss)
+    plot(epoches, testing_accuracies, "Testing Accuracy, Seed = " + str(config.seed))
+    plot(epoches, testing_loss, "Testing Loss, Seed = " + str(config.seed))
 
     if config.save_model:
-        torch.save(model.state_dict(), "mnist_cnn.pt")
+        torch.save(model.state_dict(), "mnist_cnn_" + str(config.seed) + ".pt")
+    pipe.send(training_loss)
+    pipe.send(testing_accuracies)
+    pipe.send(testing_loss)
 
 
-def plot_mean():
+
+def plot_mean(result):
     """
     Read the recorded results.
     Plot the mean results after three runs.
     :return:
     """
     """fill your code"""
+    mean_training_loss = [sum(i) / len(i) for i in zip(*result[0])]
+    mean_testing_accuracies = [sum(i) / len(i) for i in zip(*result[1])]
+    mean_testing_loss = [sum(i) / len(i) for i in zip(*result[2])]
+    epoches = list(range(1, len(mean_training_loss) + 1)) # Should depend on config
+    """plotting training performance with the records"""
+    plot(epoches, mean_training_loss, "Mean Training Loss")
+
+    """plotting testing performance with the records"""
+    plot(epoches, mean_testing_accuracies, "Mean Testing Accuracy")
+    plot(epoches, mean_testing_loss, "Mean Testing Loss")
+    
 
 
 if __name__ == '__main__':
-    arg = read_args()
-
+    processes = []
+    """remove existing files"""
+    import os
+    result = [[], [], []]
+    pipes = []
+    files = os.listdir(".")
+    for file in files:
+        if ".txt" in file and file != "requirement.txt":
+            os.remove(file)
     """toad training settings"""
-    config = load_config(arg)
+    try:
+        arg = read_args()
+        config = load_config(arg)
+        run(config)
+    except:
+        print("Trying to read configs from \"config\" folder.")
+        files = os.listdir("config")
+        arg = Arg()
+        for file in files:
+            if file != "minist.yaml":
+                arg.config_file = "config/" + file
+                config = load_config(arg)
+                pipe_recv, pipe_send = multiprocessing.Pipe(duplex=False)
+                pipes.append(pipe_recv)
+                processes.append(multiprocessing.Process(target=run, args=(config, pipe_send)))
+                processes[-1].start()
 
-    """train model and record results"""
-    run(config)
-
+    # """train model and record results"""
+    # run(config)
+    for pipe in pipes:
+        result[0].append(pipe.recv())
+        result[1].append(pipe.recv())
+        result[2].append(pipe.recv())
+    for process in processes:
+        process.join()
     """plot the mean results"""
-    plot_mean()
+    plot_mean(result)

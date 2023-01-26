@@ -63,14 +63,14 @@ def train(args, model, device, train_loader, optimizer, epoch):
         train_loss += this_loss 
         this_acc = (torch.argmax(output, 1) == target).sum().item()
         train_acc += float(this_acc)
+        print("Loss: ", this_loss, ", Accuracy: ", 100.0 * train_acc / len(train_loader.dataset), "%")
+        try:
+            with open("train_" + str(args.seed) + ".txt", "a") as f:
+                f.write("Loss: " + str(this_loss) + "\n")
+        except:
+            with open("train_" + str(args.seed) + ".txt", "w") as f:
+                f.write("Loss: " + str(this_loss) + "\n")
     training_acc, training_loss = train_acc / len(train_loader.dataset), train_loss / len(train_loader.dataset)  # replace this line
-    print("Loss: ", training_loss, ", Accuracy: ", 100.0 * training_acc, "%")
-    try:
-        with open("train_" + str(args.seed) + ".txt", "a") as f:
-            f.write("Loss: " + str(training_loss) + "\n")
-    except:
-        with open("train_" + str(args.seed) + ".txt", "w") as f:
-            f.write("Loss: " + str(training_loss) + "\n")
     return training_acc, training_loss
 
 
@@ -166,10 +166,22 @@ def run(config, pipe):
     scheduler = StepLR(optimizer, step_size=1, gamma=config.gamma)
     for epoch in range(1, config.epochs + 1):
         print("Epoch: " + str(epoch) + ", Seed: " + str(config.seed))
+        try:
+            with open("train_" + str(config.seed) + ".txt", "a") as f:
+                f.write("Epoch: " + str(epoch) + "\n")
+        except:
+            with open("train_" + str(config.seed) + ".txt", "w") as f:
+                f.write("Epoch: " + str(epoch) + "\n")
         train_acc, train_loss = train(config, model, device, train_loader, optimizer, epoch)
         """record training info, Fill your code"""
         training_accuracies.append(train_acc)
         training_loss.append(train_loss)
+        try:
+            with open("test_" + str(config.seed) + ".txt", "a") as f:
+                f.write("Epoch: " + str(epoch) + "\n")
+        except:
+            with open("test_" + str(config.seed) + ".txt", "w") as f:
+                f.write("Epoch: " + str(epoch) + "\n")
         test_acc, test_loss = test(config, model, device, test_loader)
         """record testing info, Fill your code"""
         testing_accuracies.append(test_acc)

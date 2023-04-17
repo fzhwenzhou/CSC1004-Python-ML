@@ -1,5 +1,8 @@
 # CSC1004-python-project
 
+## Documentation
+See "Documentation.md."
+
 ## Install miniconda
 Download from [here](https://docs.conda.io/en/latest/miniconda.html).
 Set up an environment with conda command, check [this tutorial](https://docs.conda.io/projects/conda/en/stable/commands.html).

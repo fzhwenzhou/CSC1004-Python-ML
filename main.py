@@ -191,6 +191,7 @@ def run(config, pipe):
         epoches.append(epoch)
 
     """plotting training performance with the records"""
+    plot(epoches, training_accuracies, "Training Accuracy, Seed = " + str(config.seed))
     plot(epoches, training_loss, "Training Loss, Seed = " + str(config.seed))
 
     """plotting testing performance with the records"""
@@ -199,6 +200,7 @@ def run(config, pipe):
 
     if config.save_model:
         torch.save(model.state_dict(), "mnist_cnn_" + str(config.seed) + ".pt")
+    pipe.send(training_accuracies)
     pipe.send(training_loss)
     pipe.send(testing_accuracies)
     pipe.send(testing_loss)
@@ -212,11 +214,13 @@ def plot_mean(result):
     :return:
     """
     """fill your code"""
-    mean_training_loss = [sum(i) / len(i) for i in zip(*result[0])]
-    mean_testing_accuracies = [sum(i) / len(i) for i in zip(*result[1])]
-    mean_testing_loss = [sum(i) / len(i) for i in zip(*result[2])]
+    mean_training_accuracies = [sum(i) / len(i) for i in zip(*result[0])]
+    mean_training_loss = [sum(i) / len(i) for i in zip(*result[1])]
+    mean_testing_accuracies = [sum(i) / len(i) for i in zip(*result[2])]
+    mean_testing_loss = [sum(i) / len(i) for i in zip(*result[3])]
     epoches = list(range(1, len(mean_training_loss) + 1)) # Should depend on config
     """plotting training performance with the records"""
+    plot(epoches, mean_training_accuracies, "Mean Training Accuracy")
     plot(epoches, mean_training_loss, "Mean Training Loss")
 
     """plotting testing performance with the records"""
@@ -229,7 +233,7 @@ if __name__ == '__main__':
     processes = []
     """remove existing files"""
     import os
-    result = [[], [], []]
+    result = [[], [], [], []]
     pipes = []
     files = os.listdir(".")
     for file in files:
@@ -259,6 +263,7 @@ if __name__ == '__main__':
         result[0].append(pipe.recv())
         result[1].append(pipe.recv())
         result[2].append(pipe.recv())
+        result[3].append(pipe.recv())
     for process in processes:
         process.join()
     """plot the mean results"""

@@ -66,10 +66,10 @@ def train(args, model, device, train_loader, optimizer, epoch):
         print("Loss: ", this_loss, ", Accuracy: ", 100.0 * train_acc / len(train_loader.dataset), "%")
         try:
             with open("train_" + str(args.seed) + ".txt", "a") as f:
-                f.write("Loss: " + str(this_loss) + "\n")
+                f.write("Loss: " + str(this_loss) + ", Accuracy: " + str(100.0 * train_acc / len(train_loader.dataset)) + "%\n")
         except:
             with open("train_" + str(args.seed) + ".txt", "w") as f:
-                f.write("Loss: " + str(this_loss) + "\n")
+                f.write("Loss: " + str(this_loss) + ", Accuracy: " + str(100.0 * train_acc / len(train_loader.dataset)) + "%\n")
     training_acc, training_loss = train_acc / len(train_loader.dataset), train_loss / len(train_loader.dataset)  # replace this line
     return training_acc, training_loss
 
